@@ -1,0 +1,47 @@
+# IDE & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build & Output
+dist/
+out/
+.vite/
+release/
+build/Release
+
+# Logs (로컬 개발 시 발생하는 로그만 제외)
+# 우리 프로젝트는 시놀로지(LOG_DIR_PATH)에 로그를 쌓으므로
+# 로컬에 생기는 임시 로그들은 올라가지 않게 합니다.
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment & Secrets
+.env
+.env.test
+.env.local
+.env.*.local
+
+# Runtime & Temp
+pids
+*.pid
+*.seed
+*.pid.lock
+.temp/
+.tmp/
+.cache/
+
+# Project Specific
+# electron-store가 생성하는 로컬 설정 파일이 프로젝트 내부에 있다면 제외
+my-settings.json
+
+# TypeScript cache
+*.tsbuildinfo
