@@ -27,7 +27,8 @@ export default defineConfig({
                 'os',
                 'child_process',
                 'url',
-                'module'
+                'module',
+                'better-sqlite3'
             ],
         },
     },

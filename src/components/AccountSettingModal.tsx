@@ -4,173 +4,134 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogDescription,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { User, UserCog, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { Monitor, UserCircle, WifiOff, Wifi, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
 
-// 모달 컴포넌트의 가시성 상태를 제어하는 인터페이스
 interface AccountSettingModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }
 
+// 설정 모달 컴포넌트(사용자 PC 정보 및 서버 상태)
 export function AccountSettingModal({ open, onOpenChange }: AccountSettingModalProps) {
-    const [userName, setUserName] = React.useState("");
-    const [userDept, setUserDept] = React.useState("");
-    const [errors, setErrors] = React.useState({ userName: false });
-    const [isSaved, setIsSaved] = React.useState(false);
-    const { toast } = useToast();
+    const [hostname, setHostname] = React.useState("");// 현재 접속 중인 호스트네임
+    const [isNetworkConnected, setIsNetworkConnected] = React.useState(true);// 서버와의 실시간 네트워크 연결 여부
 
-    // 필수 입력 필드 포커싱을 위한 참조 객체
-    const nameRef = React.useRef<HTMLInputElement>(null);
-
-    // 모달이 열릴 때마다 전자 스토어에서 저장된 사용자 정보를 불러옴
     React.useEffect(() => {
         if (open) {
-            window.electron.getGlobalAccount().then((data: any) => {
-                if (data) {
-                    setUserName(data.userName || "");
-                    setUserDept(data.userDept || "");
-                }
-            });
-            setErrors({ userName: false });
-            setIsSaved(false);
+            const initAccount = async () => {
+                window.electron.ipcRenderer.invoke('log-info', 'AccountSettingModal: 모달 진입 및 기기 정보 조회 시작');
+
+                // 현재 PC의 호스트네임 반영
+                const currentHostname = await window.electron.ipcRenderer.invoke('get-hostname');
+                setHostname(currentHostname);
+
+                // 현재 접속 기기 자동 등록 및 정보 갱신
+                await window.electron.saveGlobalAccount({
+                    userName: currentHostname,
+                    userDept: ""
+                });
+                window.electron.ipcRenderer.invoke('log-info', `AccountSettingModal: 기기 정보 자동 갱신 완료 - ${currentHostname}`);
+
+                // 서버와의 통신 가능 여부 초기 점검
+                const status = await window.electron.ipcRenderer.invoke('get-phone-status');
+                setIsNetworkConnected(status.isNetworkConnected);
+            };
+
+            initAccount();
+
+            // 서버 연결 상태 실시간으로 추적
+            const timer = setInterval(async () => {
+                const data = await window.electron.ipcRenderer.invoke('get-phone-status');// 최신 서버 연결 상태 데이터 조회
+                setIsNetworkConnected(data.isNetworkConnected);// 실시간 연결 상태 반영
+            }, 2000);
+
+            // 모달 종료 시 인터벌 자원 정리
+            return () => {
+                window.electron.ipcRenderer.invoke('log-info', 'AccountSettingModal: 모달 종료 및 상태 감지 인터벌 해제');
+                clearInterval(timer);
+            };
         }
     }, [open]);
 
-    // 입력값 유효성 검사 및 사용자 정보 저장 처리
-    const handleSave = async () => {
-        if (!userName.trim()) {
-            setErrors({ userName: true });
-            nameRef.current?.focus();
-            toast({
-                variant: "destructive",
-                title: "입력 오류",
-                description: "이름은 필수 입력 항목입니다.",
-            });
-            return;
-        }
-
-        const result = await window.electron.saveGlobalAccount({ userName, userDept });
-
-        if (result.success) {
-            // 메인 프로세스로 로그 전송하여 사용자 변경 이력 기록
-            window.electron.ipcRenderer.invoke('log-to-main', {
-                level: 'info',
-                message: `[Setting] 사용자 변경: ${userName} (${userDept})`
-            });
-
-            setIsSaved(true);
-            toast({
-                title: "저장 완료",
-                description: "사용자 정보가 성공적으로 반영되었습니다.",
-            });
-
-            // 저장 완료 후 사용자 인지를 위해 잠시 대기했다가 모달 닫기
-            setTimeout(() => {
-                setIsSaved(false);
-                onOpenChange(false);
-            }, 1500);
-        } else {
-            toast({
-                variant: "destructive",
-                title: "저장 실패",
-                description: result.error,
-            });
-        }
-    };
-
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden border-none shadow-2xl bg-white rounded-3xl">
-                {/* 상단 헤더 영역 - 서비스 용도 안내 */}
-                <div className="bg-slate-50/80 p-8 pb-6 border-b border-slate-100/80 relative">
-                    <DialogHeader>
-                        <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-4">
-                            <UserCog className="text-blue-500" size={24} />
+            <DialogContent className="max-w-[480px] p-10 border-none shadow-2xl bg-white rounded-[2.5rem] overflow-hidden">
+                {/* 상단 제목 영역 및 아이콘 장식 구성 */}
+                <DialogHeader className="mb-8">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-slate-900 rounded-[1.2rem] flex items-center justify-center text-white shadow-xl shadow-slate-200">
+                            <UserCircle size={28} strokeWidth={2.5} />
                         </div>
-                        <DialogTitle className="text-xl font-bold text-slate-900 tracking-tight">
-                            사용자 정보 등록
-                        </DialogTitle>
-                        <DialogDescription className="text-[13px] text-slate-500 font-medium leading-relaxed mt-1.5">
-                            공용폰 제어 로그를 위해 정보를 입력해주세요.
-                        </DialogDescription>
-                    </DialogHeader>
-                </div>
+                        <div>
+                            <DialogTitle className="text-2xl font-black text-slate-900 tracking-tighter">
+                                기기 정보 확인
+                            </DialogTitle>
+                            <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest mt-0.5">
+                                Device Information
+                            </p>
+                        </div>
+                    </div>
+                </DialogHeader>
 
-                {/* 입력 폼 영역 */}
-                <div className="p-8 space-y-6">
-                    {/* 사용자 이름 입력 필드 */}
-                    <div className="space-y-2.5">
-                        <label className={cn(
-                            "text-[11px] font-bold uppercase tracking-[0.1em] ml-1 transition-colors",
-                            errors.userName ? "text-red-500" : "text-slate-400"
-                        )}>
-                            Full Name {errors.userName && " - 필수 입력"}
+                <div className="space-y-6">
+                    {/* 호스트네임 정보 섹션 */}
+                    <div className="space-y-3">
+                        <label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                            Hostname
                         </label>
                         <div className="relative group">
-                            <User className={cn(
-                                "absolute left-4 top-1/2 -translate-y-1/2 transition-colors",
-                                errors.userName ? "text-red-400" : "text-slate-300 group-focus-within:text-blue-500"
-                            )} size={16} />
-                            <Input
-                                ref={nameRef}
-                                placeholder="성함을 입력하세요"
-                                className={cn(
-                                    "pl-12 h-12 bg-slate-50 transition-all rounded-xl border-none shadow-inner",
-                                    errors.userName ? "ring-2 ring-red-100 bg-red-50/30" : "focus:bg-white focus:ring-4 focus:ring-blue-50"
-                                )}
-                                value={userName}
-                                onChange={(e) => {
-                                    setUserName(e.target.value);
-                                    if (errors.userName) setErrors({ userName: false });
-                                }}
-                            />
+                            <Monitor className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500 z-10" size={18} />
+                            <div className="h-16 pl-14 pr-6 bg-slate-50 border-none rounded-2xl font-black text-slate-700 shadow-inner text-lg flex items-center select-none cursor-default">
+                                {hostname}
+                            </div>
                         </div>
                     </div>
 
-                    {/* 소속 부서 입력 필드 */}
-                    <div className="space-y-2.5">
-                        <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400 ml-1">
-                            Department
-                        </label>
-                        <div className="relative group">
-                            <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={16} />
-                            <Input
-                                placeholder="소속 부서를 입력하세요"
-                                className="pl-12 h-12 bg-slate-50 transition-all rounded-xl border-none shadow-inner focus:bg-white focus:ring-4 focus:ring-blue-50"
-                                value={userDept}
-                                onChange={(e) => setUserDept(e.target.value)}
-                            />
-                        </div>
+                    {/* 기기 식별자 자동 등록 관련 안내 박스 */}
+                    <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <Info size={16} className="text-slate-400 mt-0.5 shrink-0" />
+                        <p className="text-[12px] leading-relaxed text-slate-500 font-medium">
+                            해당 PC는 <span className="font-bold text-slate-700">{hostname}</span> 식별자로 자동 등록되었습니다. 공용폰 제어 시 이 이름으로 사용 기록이 남습니다.
+                        </p>
                     </div>
 
-                    {/* 저장 버튼 영역 */}
-                    <div className="pt-2 flex flex-col gap-4">
-                        <Button
-                            onClick={handleSave}
-                            disabled={isSaved}
-                            className={cn(
-                                "w-full h-13 font-bold rounded-xl transition-all shadow-lg active:scale-[0.98] py-6",
-                                isSaved
-                                    ? "bg-green-500 hover:bg-green-600 text-white"
-                                    : "bg-slate-900 hover:bg-blue-600 text-white"
-                            )}
-                        >
-                            {isSaved ? (
-                                <div className="flex items-center gap-2">
-                                    <CheckCircle2 size={18} />
-                                    <span>정보가 저장되었습니다!</span>
-                                </div>
+                    {/* 실시간 서버 연결 상태 */}
+                    <div className={cn(
+                        "p-5 rounded-[1.5rem] flex items-center gap-4 border transition-all duration-500",
+                        isNetworkConnected
+                            ? "bg-blue-50/50 border-blue-100/50 text-blue-700"
+                            : "bg-amber-50 border-amber-100 text-amber-700"
+                    )}>
+                        <div className="relative">
+                            {isNetworkConnected ? (
+                                <>
+                                    <Wifi size={20} className="text-blue-500"/>
+                                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-ping"/>
+                                </>
                             ) : (
-                                "데이터 업데이트"
+                                <WifiOff size={20} className="text-amber-500 animate-pulse"/>
                             )}
-                        </Button>
+                        </div>
+                        {/* 상태별 상세 텍스트 설명 영역 */}
+                        <div className="flex flex-col">
+                            <span className="text-[13px] font-black tracking-tight">
+                                {isNetworkConnected ? "서버 동기화 중" : "서버 연결 끊김"}
+                            </span>
+                            <span className="text-[10px] font-bold opacity-70">
+                                {isNetworkConnected ? "정상적으로 데이터를 주고받고 있습니다." : "네트워크 환경을 확인해주세요."}
+                            </span>
+                        </div>
                     </div>
+
+                    {/* 모달 닫기 버튼 */}
+                    <button
+                        onClick={() => onOpenChange(false)}
+                        className="w-full h-14 rounded-2xl font-black text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all active:scale-[0.98]"
+                    >
+                        닫기
+                    </button>
                 </div>
             </DialogContent>
         </Dialog>

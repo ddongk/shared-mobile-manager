@@ -1,20 +1,19 @@
 import * as React from "react";
-import { Smartphone, User, Clock, Loader2, RefreshCw, MonitorPlay, AlertCircle, ScrollText, ListOrdered, ChevronRight, Info } from "lucide-react";
+import { Smartphone, Clock, Loader2, RefreshCw, MonitorPlay, AlertCircle, ScrollText, ListOrdered, ChevronRight, Monitor, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-export default function PhoneManager({ selectedId }: { selectedId: string }) {
-    // 대기 요청이 유효하다고 판단하는 기준 시간 (10분)
-    const WAITING_EXPIRATION_MS = 10 * 60 * 1000;
-
-    const [phone, setPhone] = React.useState<any>(null);
-    const [loading, setLoading] = React.useState(true);
+export default function PhoneManager({ selectedId, phoneData }: { selectedId: string, phoneData: any }) {
+    // 대기 요청 유효 시간 및 기본 상태 변수 정의
+    const WAITING_EXPIRATION_MS = 10 * 60 * 1000; // 10분
+    const phone = phoneData;
+    const [loading, setLoading] = React.useState(false);
     const [myUserName, setMyUserName] = React.useState<string>("");
-    const [myUserDept, setMyUserDept] = React.useState<string>("");
     const { toast } = useToast();
 
+    // 모달 상태 및 반납 요청 관리용 상태 정의
     const [showReturnModal, setShowReturnModal] = React.useState(false);
     const [showTimeoutModal, setShowTimeoutModal] = React.useState(false);
     const [activeRequest, setActiveRequest] = React.useState<any>(null);
@@ -22,266 +21,270 @@ export default function PhoneManager({ selectedId }: { selectedId: string }) {
     const [ackedRequestIds, setAckedRequestIds] = React.useState<Set<string>>(new Set());
     const timerRef = React.useRef<any>(null);
 
-    // 시놀로지 서버로부터 최신 기기 상태 데이터를 가져옴
-    const fetchData = React.useCallback(async () => {
-        try {
-            const data = await window.electron.ipcRenderer.invoke('get-phone-status');
-            const target = data.phones.find((p: any) => p.id === selectedId);
-            if (target) {
-                setPhone(target);
-            }
-        } catch (error) {
-            console.error("데이터 로드 실패", error);
-        }
-    }, [selectedId]);
-
-    // 기기 제어 권한을 획득하고 scrcpy를 실행
+    // 기기 점유 확인 및 화면 제어(scrcpy) 실행
     const handleControlWithCheck = async () => {
-        if (!myUserName || myUserName.trim() === "") {
-            toast({
-                variant: "destructive",
-                title: "사용자 정보 필요",
-                description: "먼저 우측 상단에서 사용자 정보를 설정해 주세요.",
+        const acc = await window.electron.ipcRenderer.invoke('get-global-account');
+        if (acc && acc.userName) {
+            window.electron.ipcRenderer.invoke('log-info', `PhoneManager: ${selectedId} 기기 점유 시도`);
+            const success = await window.electron.ipcRenderer.invoke('occupy-phone', {
+                phoneId: selectedId,
+                userName: acc.userName,
+                userDept: ""
             });
-            return;
-        }
 
-        const success = await window.electron.ipcRenderer.invoke('occupy-phone', {
-            phoneId: selectedId,
-            userId: myUserName,
-            userName: myUserName,
-            userDept: myUserDept
-        });
-
-        if (success) {
-            await window.electron.ipcRenderer.invoke('run-scrcpy', {
-                ip: phone.ip,
-                phoneId: selectedId
-            });
-            fetchData();
+            if (success) {
+                setShowReturnModal(false);
+                setActiveRequest(null);
+                if (phone.requests) {
+                    const myReqIds = phone.requests
+                        .filter((r: any) => r.user === acc.userName)
+                        .map((r: any) => `${r.user}-${r.time}`);
+                    setAckedRequestIds(prev => new Set([...Array.from(prev), ...myReqIds]));
+                }
+                window.electron.ipcRenderer.invoke('log-info', `PhoneManager: 점유 성공, scrcpy 실행`);
+                await window.electron.ipcRenderer.invoke('run-scrcpy', {
+                    ip: phone.ip,
+                    phoneId: selectedId
+                });
+            } else {
+                window.electron.ipcRenderer.invoke('log-info', `PhoneManager: 점유 실패 (이미 사용 중)`);
+                toast({ variant: "destructive", title: "점유 실패", description: "이미 사용 중입니다." });
+            }
         }
     };
 
-    // 컴포넌트 마운트 시 사용자 계정 정보 및 기기 데이터를 초기 로드
+    // 컴포넌트 로드 시 전역 계정 정보 초기화
     React.useEffect(() => {
         const init = async () => {
             const acc = await window.electron.ipcRenderer.invoke('get-global-account');
-            if (acc) { setMyUserName(acc.userName); setMyUserDept(acc.userDept || ""); }
-            await fetchData();
-            setLoading(false);
+            if (acc) setMyUserName(acc.userName);
         };
         init();
-        const interval = setInterval(fetchData, 10000);
-        return () => clearInterval(interval);
-    }, [fetchData]);
+    }, []);
 
-    // 사이드바에서 선택된 기기가 변경될 때마다 데이터를 갱신
+    // 타 사용자의 반납 요청 실시간 감시 및 팝업 노출 로직
     React.useEffect(() => {
-        setLoading(true);
-        fetchData().then(() => setLoading(false));
-    }, [selectedId, fetchData]);
+        if (!myUserName || !phone || phone.currentUser !== myUserName) return;
+        if (showReturnModal || showTimeoutModal) return;
 
-    // 현재 사용자가 기기를 점유 중일 때 타인의 반납 요청이 있는지 감시
-    React.useEffect(() => {
-        if (!myUserName || showReturnModal || showTimeoutModal || !phone) return;
-        if (phone.currentUser === myUserName && phone.requests?.length > 0) {
-            const validReqs = phone.requests.filter((r: any) => Date.now() - new Date(r.time).getTime() < WAITING_EXPIRATION_MS);
-            if (validReqs.length > 0) {
-                const req = validReqs[0];
-                const rid = `${req.user}-${req.time}`;
-                if (!ackedRequestIds.has(rid)) {
-                    setActiveRequest({ by: req.user, phoneId: selectedId, requestId: rid });
-                    setShowReturnModal(true);
-                    setTimeLeft(60);
-                }
+        const reqs = phone.requests || [];
+        if (reqs.length > 0) {
+            const actualRequests = reqs.filter((req: any) => {
+                const isMine = req.user === myUserName;
+                const isAcked = ackedRequestIds.has(`${req.user}-${req.time}`);
+                return !isMine && !isAcked;
+            });
+
+            if (actualRequests.length > 0) {
+                const firstReq = actualRequests[0];
+                const rid = `${firstReq.user}-${firstReq.time}`;
+                window.electron.ipcRenderer.invoke('log-info', `PhoneManager: ${firstReq.user}의 반납 요청 감지`);
+                setActiveRequest({ by: firstReq.user, phoneId: selectedId, requestId: rid });
+                setTimeLeft(60);
+                setShowReturnModal(true);
+                setAckedRequestIds(prev => new Set(prev).add(rid));
             }
         }
-    }, [phone, myUserName, ackedRequestIds, showReturnModal, showTimeoutModal, selectedId]);
+    }, [phone, myUserName, selectedId, ackedRequestIds]);
 
-    // 반납 요청 팝업 시 60초 타이머 작동
+    // 반납 요청 팝업 발생 시 카운트다운 및 자동 반납 타이머 관리
     React.useEffect(() => {
         if (showReturnModal && timeLeft > 0) {
             timerRef.current = setTimeout(() => setTimeLeft(p => p - 1), 1000);
         } else if (showReturnModal && timeLeft === 0) {
+            window.electron.ipcRenderer.invoke('log-info', 'PhoneManager: 응답 시간 초과로 인한 자동 반납 실행');
             handleAutoRelease();
         }
         return () => clearTimeout(timerRef.current);
     }, [showReturnModal, timeLeft]);
 
-    // 타이머 종료 시 기기를 강제로 반납 처리
+    // 시간 초과 시 기기 권한을 강제로 해제하는 로직
     const handleAutoRelease = async () => {
         setShowReturnModal(false);
         await window.electron.ipcRenderer.invoke('release-phone', { phoneId: selectedId });
-        fetchData();
         setShowTimeoutModal(true);
     };
 
-    // 현재 사용 중인 사람에게 반납 요청 데이터 전송
+    // 다른 사용자가 사용 중일 때 반납 요청(대기열 등록) 송신
     const handleRequest = async () => {
-        const requester = `${myUserName}(${myUserDept || '미지정'})`;
         const localISO = new Date(Date.now() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, -1);
-        await window.electron.ipcRenderer.invoke('send-return-request', { phoneId: selectedId, requestedBy: requester, time: localISO });
-        fetchData();
-        toast({ title: "요청 완료", description: "대기 등록되었습니다. (10분 유지)" });
+        window.electron.ipcRenderer.invoke('log-info', `PhoneManager: ${selectedId} 기기에 대한 반납 요청 발송`);
+        await window.electron.ipcRenderer.invoke('send-return-request', {
+            phoneId: selectedId,
+            userName: myUserName,
+            time: localISO
+        });
+        toast({ title: "요청 완료", description: "대기 리스트에 등록되었습니다." });
     };
 
-    if (loading || !phone) return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
+    // 대기 리스트에 등록된 본인 요청 취소 처리
+    const handleCancelRequest = async () => {
+        window.electron.ipcRenderer.invoke('log-info', `PhoneManager: ${selectedId} 기기 대기 취소`);
+        await window.electron.ipcRenderer.invoke('cancel-return-request', {
+            phoneId: selectedId,
+            userName: myUserName
+        });
+        toast({ title: "대기 취소", description: "대기 리스트에서 삭제되었습니다." });
+    };
 
+    // 데이터 로딩 중 스피너 노출 처리
+    if (!phone) return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
+
+    // 대기열 유효성 검사 및 본인의 대기 상태 확인 로직
     const isMyPhone = phone.currentUser === myUserName;
-    const validRequests = (phone.requests || []).filter((req: any) => Date.now() - new Date(req.time).getTime() < WAITING_EXPIRATION_MS);
-    const amIWaiting = validRequests.some((req: any) => req.user.startsWith(myUserName));
+    const validRequests = (phone.requests || []).filter((req: any) => {
+        const requestTime = new Date(req.time).getTime();
+        const isExpired = Date.now() - requestTime >= WAITING_EXPIRATION_MS;
+        const isMine = req.user === myUserName;
+        const isOccupiedByMe = phone.currentUser === myUserName;
+        if (isOccupiedByMe && isMine) return false;
+        return !isExpired;
+    });
+    const amIWaiting = validRequests.some((req: any) => req.user === myUserName);
 
     return (
-        <div className="h-full flex flex-col space-y-6 animate-in fade-in duration-700 overflow-hidden">
-            {/* 기기 이름 및 IP 정보 헤더 */}
-            <div className="flex justify-between items-center px-2 flex-shrink-0">
-                <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tight">{phone.name}</h2>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{phone.ip}</p>
-                </div>
+        <div className="h-full flex flex-col space-y-5 animate-in fade-in duration-700 w-full px-6 overflow-hidden pb-8">
 
-                <Button
-                    onClick={() => { setLoading(true); fetchData().then(() => setLoading(false)); }}
-                    variant="ghost"
-                    className="hover:bg-slate-100 rounded-xl gap-2 text-slate-500 font-bold"
-                >
-                    <RefreshCw size={14} className={cn(loading && "animate-spin")} /> 갱신
-                </Button>
+            {/* 기기 명칭 및 접속 IP 정보를 포함한 상단 헤더 영역 */}
+            <div className="flex justify-between items-end flex-shrink-0">
+                <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                        <div className={cn("w-2 h-2 rounded-full", phone.status === 'available' ? "bg-emerald-500" : "bg-blue-500 animate-pulse")} />
+                        <h2 className="text-2xl font-black text-slate-800 tracking-tight italic uppercase">{phone.name}</h2>
+                    </div>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest ml-4">{phone.ip}</p>
+                </div>
             </div>
 
             <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
-                {/* 메인 제어 카드 - 현재 상태 및 제어 버튼 */}
-                <div className="col-span-12 lg:col-span-5 h-full flex flex-col">
-                    <div className="flex-1 bg-white rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 flex flex-col">
-                        <div className="flex items-center justify-between mb-8 flex-shrink-0">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Control Center</h3>
-                            <div className={cn(
-                                "px-3 py-1 rounded-full text-[10px] font-bold border",
-                                phone.status === 'available' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-blue-50 text-blue-600 border-blue-100"
-                            )}>
-                                {phone.status === 'available' ? "● Available" : "● Busy"}
-                            </div>
-                        </div>
 
-                        <div className="flex-1 flex flex-col justify-center space-y-6">
-                            <div className="p-6 rounded-2xl bg-slate-50/50 border border-slate-100">
-                                <p className="text-[10px] text-slate-400 font-black uppercase mb-2 tracking-tighter">Current User</p>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-slate-400">
-                                        <User size={20} />
+                {/* 제어 시작, 화면 제어 중 상태, 반납 요청 버튼이 위치한 메인 카드 */}
+                <div className="col-span-12 lg:col-span-5 flex flex-col min-h-0">
+                    <div className={cn(
+                        "flex-1 rounded-[2.5rem] border p-8 flex flex-col shadow-lg transition-all duration-500",
+                        isMyPhone ? "bg-blue-50/50 border-blue-200" : "bg-white border-slate-100"
+                    )}>
+                        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest italic mb-8">Control Center</h3>
+
+                        <div className="flex-1 flex flex-col justify-center gap-8">
+                            <div className={cn(
+                                "p-8 rounded-[2rem] border transition-all duration-500 shadow-inner flex flex-col justify-center min-h-[160px]",
+                                isMyPhone ? "bg-white border-blue-100" : "bg-slate-50/50 border-slate-100"
+                            )}>
+                                <div className="flex items-center gap-6">
+                                    <div className={cn(
+                                        "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm transition-colors",
+                                        isMyPhone ? "bg-blue-600 text-white" : "bg-slate-800 text-white"
+                                    )}>
+                                        <Monitor size={28} />
                                     </div>
-                                    <span className="text-lg font-black text-slate-700 truncate">
-                                        {phone.status === 'occupied' ? `${phone.currentUser} (${phone.currentUserDept})` : "현재 비어 있음"}
-                                    </span>
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight mb-1">Active PC Name</span>
+                                        <span className={cn("text-2xl font-black truncate tracking-tighter", isMyPhone ? "text-blue-700" : "text-slate-900")}>
+                                            {phone.status === 'busy' ? (isMyPhone ? `${phone.currentUser} (나)` : phone.currentUser) : "Available"}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* 상태별 액션 버튼 (제어 시작, 웨이팅 취소, 반납 요청) */}
-                        <div className="mt-8 flex-shrink-0">
-                            {phone.status === 'available' ? (
-                                <Button
-                                    onClick={handleControlWithCheck}
-                                    className="w-full bg-[#1e293b] hover:bg-blue-600 text-white font-black py-8 rounded-2xl shadow-lg transition-all group border-b-4 border-blue-900/20"
-                                >
-                                    제어 시작하기 <ChevronRight size={18} className="ml-1 group-hover:translate-x-1 transition-transform" />
-                                </Button>
-                            ) : (
-                                isMyPhone ? (
-                                    <Button disabled className="w-full bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-2xl py-8 font-black opacity-100">
-                                        <MonitorPlay size={18} className="mr-2 animate-pulse" /> 현재 제어 중입니다
+                            <div className="h-[72px] flex-shrink-0">
+                                {phone.status === 'available' ? (
+                                    <Button onClick={handleControlWithCheck} className="w-full h-full bg-slate-900 hover:bg-blue-600 text-white font-black text-lg rounded-[1.5rem] shadow-xl transition-all group active:scale-[0.98]">
+                                        제어 시작하기 <ChevronRight size={22} className="ml-1 group-hover:translate-x-1 transition-transform" />
                                     </Button>
                                 ) : (
-                                    amIWaiting ? (
-                                        <Button onClick={() => window.electron.ipcRenderer.invoke('cancel-return-request', { phoneId: selectedId, userName: myUserName }).then(fetchData)} variant="outline" className="w-full py-8 rounded-2xl font-black text-red-500 border-red-100 hover:bg-red-50">웨이팅 취소하기</Button>
+                                    isMyPhone ? (
+                                        <Button disabled className="w-full h-full bg-slate-100 text-blue-600 rounded-[1.5rem] font-black text-lg opacity-100 border border-blue-100">
+                                            <MonitorPlay size={22} className="mr-2 animate-bounce" /> 화면 제어 중...
+                                        </Button>
                                     ) : (
-                                        <Button onClick={handleRequest} variant="outline" className="w-full py-8 rounded-2xl border-slate-200 text-slate-600 font-black hover:bg-slate-50">반납 요청하기</Button>
+                                        <Button
+                                            onClick={amIWaiting ? handleCancelRequest : handleRequest}
+                                            className={cn(
+                                                "w-full h-full rounded-[1.5rem] font-black text-lg shadow-lg transition-all active:scale-[0.98]",
+                                                amIWaiting
+                                                    ? "bg-white text-rose-500 border border-rose-200 hover:bg-rose-50 shadow-rose-100/50"
+                                                    : "bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200/50"
+                                            )}
+                                        >
+                                            {amIWaiting ? (
+                                                <span className="flex items-center gap-2"><XCircle size={20} /> 대기 취소하기</span>
+                                            ) : "반납 요청하기"}
+                                        </Button>
                                     )
-                                )
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 오늘 일자의 기기 접속 로그 리스트 */}
-                <div className="col-span-12 lg:col-span-7 h-full flex flex-col overflow-hidden">
-                    <div className="flex-1 bg-white rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 flex flex-col overflow-hidden">
-                        <div className="flex items-center gap-2 mb-6 text-slate-400 flex-shrink-0">
-                            <ScrollText size={16} />
-                            <h3 className="text-sm font-black uppercase tracking-widest">Recent Access Log (Today)</h3>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
-                            {phone.accessLogs && phone.accessLogs.length > 0 ? (
-                                [...phone.accessLogs]
-                                    .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-                                    .reverse()
-                                    .map((log: any, idx: number) => {
-                                        const start = new Date(log.startTime);
-                                        const end = new Date(log.endTime);
-                                        const ymd = `${String(start.getFullYear()).slice(2)}/${String(start.getMonth() + 1).padStart(2, '0')}/${String(start.getDate()).padStart(2, '0')}`;
-                                        const startTime = start.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                                        const endTime = end.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
-
-                                        return (
-                                            <div key={idx} className="p-4 bg-slate-50/50 rounded-xl border border-slate-100 flex items-center justify-between hover:bg-white hover:border-blue-100 transition-colors">
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-slate-700 text-sm">{log.user} <span className="text-[10px] text-slate-400 font-medium ml-1">{log.dept}</span></span>
-                                                </div>
-                                                <div className="text-[11px] font-mono text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-slate-100 flex items-center gap-2 shadow-sm">
-                                                    <span className="text-slate-300">{ymd}</span>
-                                                    <span className="font-bold text-slate-700">{startTime} ~ {endTime}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-slate-300 italic text-sm">기록이 없습니다.</div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 하단 대기열 섹션 */}
-                <div className="col-span-12 flex-shrink-0">
-                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                    <ListOrdered size={16} className="text-blue-500" />
-                                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Waiting List</h3>
-                                </div>
-                                <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg">
-                                    <Info size={12} className="text-slate-400" />
-                                    <span className="text-[11px] text-slate-500 font-medium">대기 정보는 요청 후 <strong className="text-blue-600 font-black">10분간</strong>만 유지됩니다.</span>
-                                </div>
+                                )}
                             </div>
-                            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                                {validRequests.length}명 대기 중
+                        </div>
+                    </div>
+                </div>
+
+                {/* 해당 기기를 사용했던 사용자들의 시계열 로그 목록 영역 */}
+                <div className="col-span-12 lg:col-span-7 flex flex-col min-h-0 overflow-hidden">
+                    <div className="flex-1 bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.03)] p-8 flex flex-col overflow-hidden">
+                        <div className="flex items-center gap-2.5 text-slate-800 mb-6 flex-shrink-0">
+                            <ScrollText size={16} className="text-blue-500" />
+                            <h3 className="text-[12px] font-black uppercase tracking-widest italic">Access History</h3>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-1">
+                            {phone.accessLogs && phone.accessLogs.length > 0 ? (
+                                [...phone.accessLogs].sort((a,b) => b.startTime.localeCompare(a.startTime)).map((log, idx) => {
+                                    const start = new Date(log.startTime);
+                                    const end = new Date(log.endTime);
+                                    const startTime = start.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                                    const endTime = end.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
+
+                                    return (
+                                        <div key={idx} className="flex items-center justify-between py-1.5 px-4 rounded-xl hover:bg-slate-50 transition-colors group">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-200 group-hover:bg-blue-400 transition-colors shrink-0" />
+                                                <span className="font-bold text-slate-600 text-[13px] truncate group-hover:text-slate-900">{log.user}</span>
+                                            </div>
+                                            <div className="text-[11px] font-mono font-bold text-slate-400 shrink-0 bg-slate-50 group-hover:bg-white px-2 py-0.5 rounded-md border border-transparent group-hover:border-slate-100">
+                                                {startTime} <span className="mx-1 opacity-20 text-slate-900">-</span> {endTime}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-slate-300 italic text-sm">No logs found</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 현재 기기 사용을 위해 대기 중인 사용자 순번 리스트 영역 */}
+                <div className="col-span-12 flex-shrink-0">
+                    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.03)] p-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-2.5">
+                                <ListOrdered size={18} className="text-blue-600" />
+                                <h3 className="text-[13px] font-black text-slate-800 uppercase tracking-widest italic">Waiting List</h3>
+                            </div>
+                            <span className="text-[11px] font-black text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full border border-blue-100">
+                                {validRequests.length} Waiting
                             </span>
                         </div>
 
-                        <div className="overflow-x-auto custom-scrollbar-h pb-2">
+                        <div className="overflow-x-auto custom-scrollbar-h pb-2 flex gap-4">
                             {validRequests.length > 0 ? (
-                                <div className="flex gap-4 min-w-max">
-                                    {validRequests.map((req: any, idx: number) => (
-                                        <div key={idx} className="flex items-center gap-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-100 min-w-[240px]">
-                                            <div className="text-xl font-black text-blue-200">0{idx + 1}</div>
-                                            <div>
-                                                <p className="font-black text-slate-700 text-sm">{req.user}</p>
-                                                <p className="text-[10px] text-blue-600 font-bold flex items-center gap-1">
-                                                    <Clock size={10} /> {new Date(req.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}
-                                                </p>
-                                            </div>
+                                validRequests.map((req: any, idx: number) => (
+                                    <div key={idx} className={cn(
+                                        "flex items-center gap-5 p-4 px-6 rounded-[1.5rem] border min-w-[200px] shadow-sm transition-all",
+                                        req.user === myUserName ? "bg-blue-50 border-blue-200 ring-2 ring-blue-100" : "bg-slate-50/50 border-slate-100"
+                                    )}>
+                                        <div className={cn("text-2xl font-black italic shrink-0", req.user === myUserName ? "text-blue-200" : "text-slate-200")}>#{idx + 1}</div>
+                                        <div className="min-w-0">
+                                            <p className="font-black text-slate-800 text-sm truncate">{req.user === myUserName ? `${req.user} (나)` : req.user}</p>
+                                            <p className="text-[10px] text-blue-500 font-bold flex items-center gap-1.5 mt-0.5">
+                                                <Clock size={12} /> {new Date(req.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}
+                                            </p>
                                         </div>
-                                    ))}
-                                </div>
+                                    </div>
+                                ))
                             ) : (
-                                <div className="py-8 text-center bg-slate-50/30 rounded-3xl border border-dashed border-slate-200">
-                                    <p className="text-slate-300 font-bold italic text-sm">현재 대기 중인 사용자가 없습니다.</p>
+                                <div className="w-full py-6 text-center bg-slate-50/30 rounded-[1.5rem] border border-dashed border-slate-200">
+                                    <p className="text-slate-400 font-bold italic text-sm">No one is currently waiting in the list</p>
                                 </div>
                             )}
                         </div>
@@ -289,7 +292,7 @@ export default function PhoneManager({ selectedId }: { selectedId: string }) {
                 </div>
             </div>
 
-            {/* 타인의 반납 요청 알림 모달 */}
+            {/* 타 사용자의 반납 요청 수신 시 노출되는 확인 안내 팝업 */}
             <Dialog open={showReturnModal} onOpenChange={(o) => !o && setShowReturnModal(false)}>
                 <DialogContent className="sm:max-w-[400px] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white [&>button]:hidden">
                     <div className="bg-red-50 p-8 pb-6 border-b border-red-100 text-center">
@@ -310,7 +313,7 @@ export default function PhoneManager({ selectedId }: { selectedId: string }) {
                 </DialogContent>
             </Dialog>
 
-            {/* 응답 미기입으로 인한 자동 반납 안내 모달 */}
+            {/* 응답 미기입으로 인한 자동 기기 반납 완료 안내 팝업 */}
             <Dialog open={showTimeoutModal} onOpenChange={setShowTimeoutModal}>
                 <DialogContent className="sm:max-w-[400px] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white">
                     <div className="bg-slate-50 p-8 pb-6 border-b border-slate-100 text-center">

@@ -1,87 +1,106 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { ScrollText, Terminal, Info, ChevronRight } from 'lucide-react';
+import { cn } from "@/lib/utils";
 
-// 일렉트론 메인 프로세스에서 생성되는 시스템 로그(main.log)를 실시간으로 모니터링하는 컴포넌트
 const SystemLogs = () => {
+    // 로그 데이터 및 업데이트 횟수 기록
     const [logs, setLogs] = useState<string>('');
-    const logEndRef = useRef<HTMLDivElement>(null);
+    const [tick, setTick] = useState(0);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-    // 메인 프로세스로부터 전체 로그 텍스트를 수신하여 상태 업데이트
+    // 최신 로그 파일
     const fetchLogs = useCallback(async () => {
         try {
             const data = await window.electron.ipcRenderer.invoke('get-logs');
-            if (data) {
-                setLogs(data);
-            }
+            setLogs(data || '');
+            setTick(t => t + 1);
         } catch (err) {
-            console.error('[SystemLogs] 호출 에러:', err);
+            window.electron.ipcRenderer.invoke('log-info', 'SystemLogs: 로그 데이터 수집 실패');
+            console.error('[SystemLogs] Error:', err);
         }
     }, []);
 
-    // 컴포넌트 로드 시 로그 수집을 시작하고 1초 간격으로 자동 갱신 수행
+    // 컴포넌트 마운트 시 로그 수집 타이머 가동 및 종료 처리
     useEffect(() => {
-        void fetchLogs();
-
-        const timer = setInterval(() => {
-            void fetchLogs();
-        }, 1000);
-
-        // 컴포넌트 소멸 시 불필요한 리소스 점유 방지를 위해 타이머 제거
-        return () => clearInterval(timer);
+        window.electron.ipcRenderer.invoke('log-info', 'SystemLogs: 시스템 로그 모니터링 페이지 진입');
+        fetchLogs();
+        const timer = setInterval(fetchLogs, 1000);
+        return () => {
+            window.electron.ipcRenderer.invoke('log-info', 'SystemLogs: 로그 모니터링 종료');
+            clearInterval(timer);
+        };
     }, [fetchLogs]);
 
-    // 새로운 로그가 추가될 때마다 화면 최하단으로 자동 스크롤 처리
+    // 새로운 로그가 수신될 때마다 최하단으로 자동 스크롤 수행
     useEffect(() => {
-        if (logEndRef.current) {
-            logEndRef.current.scrollIntoView({ behavior: "smooth" });
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [logs]);
+    }, [logs, tick]);
 
     return (
-        <div className="flex flex-col h-full space-y-6">
-            {/* 상단 헤더 - 서비스 상태 표시 */}
-            <div className="flex justify-between items-end border-b border-slate-100 pb-6">
-                <div>
-                    <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">System Logs</h1>
-                    <p className="text-slate-400 text-sm font-medium">실시간 앱 실행 및 엔진 가동 상태를 확인합니다.</p>
+        <div className="flex flex-col h-full bg-[#F8FAFC] animate-in fade-in duration-700 w-full px-2 overflow-hidden pb-6">
+
+            {/* 페이지 상단 제목 및 실시간 동기화 상태 표시 헤더 영역 */}
+            <div className="flex justify-between items-end flex-shrink-0 mb-8">
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-slate-900 rounded-[1.2rem] flex items-center justify-center text-white shadow-xl shadow-slate-200">
+                        <Terminal size={28} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tighter italic uppercase">
+                            시스템 로그 확인
+                        </h2>
+                        <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest mt-0.5">
+                            System Runtime Activity
+                        </p>
+                    </div>
                 </div>
 
-                {/* 현재 로그 스트리밍 활성화 상태를 시각적으로 표시 */}
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full border border-slate-100">
-                    <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </div>
+                    <span className="text-[12px] font-black text-slate-400 uppercase tracking-tight">
+                        LIVE SYNC <span className="text-slate-900 ml-1">{tick}</span>
                     </span>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Live Streaming</span>
                 </div>
             </div>
 
-            {/* 터미널 스타일의 로그 출력 본문 */}
-            <div className="flex-1 bg-slate-950 rounded-2xl p-6 overflow-hidden flex flex-col shadow-2xl border border-slate-800">
-                <div className="flex-1 overflow-y-auto font-mono text-[12px] leading-relaxed text-slate-300 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent pr-2">
-                    {logs ? (
-                        logs.split('\n').map((line, i) => (
-                            <div
-                                key={i}
-                                className="py-0.5 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors"
-                            >
-                                {/* 줄 번호 표시 */}
-                                <span className="opacity-30 mr-3 text-[10px] inline-block w-4 text-right">{i + 1}</span>
+            {/* 수집된 로그 메인 박스 영역 */}
+            <div className="flex-1 flex flex-col min-h-0 space-y-4">
 
-                                {/* 로그 레벨에 따른 텍스트 색상 분기 처리 (Error, Warn 등) */}
-                                <span className={
-                                    line.toLowerCase().includes('[error]') ? 'text-red-400' :
-                                        line.toLowerCase().includes('[warn]') ? 'text-yellow-400' :
-                                            line.toLowerCase().includes('[watcher]') ? 'text-blue-400' : ''
-                                }>
-                                    {line}
-                                </span>
+                <div className="flex-1 bg-slate-50 border-none rounded-[2rem] shadow-inner relative overflow-hidden flex flex-col">
+                    <div
+                        ref={scrollRef}
+                        className="flex-1 overflow-y-auto p-8 font-mono text-[13px] leading-relaxed text-slate-600 custom-scrollbar selection:bg-blue-100 selection:text-blue-700"
+                    >
+                        {logs ? (
+                            <pre className="whitespace-pre-wrap break-all">
+                                {logs}
+                            </pre>
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center opacity-30 space-y-3">
+                                <ScrollText size={40} className="text-slate-400" />
+                                <p className="font-black text-[11px] uppercase tracking-[0.2em]">Wait for system data...</p>
                             </div>
-                        ))
-                    ) : (
-                        <div className="text-slate-500 italic">로그를 기다리는 중...</div>
-                    )}
-                    {/* 스크롤 하단 고정을 위한 빈 요소 */}
-                    <div ref={logEndRef} />
+                        )}
+                    </div>
+                </div>
+
+                {/* 갱신 주기 및 자동 스크롤 작동 여부를 알려주는 하단 가이드바 */}
+                <div className="flex items-center justify-between p-5 bg-white rounded-[1.5rem] border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <Info size={18} className="text-blue-500 shrink-0" />
+                        <p className="text-[12px] text-slate-500 font-medium">
+                            실시간으로 수집되는 런처의 작업 기록입니다. <span className="font-bold text-slate-800 underline decoration-blue-200 underline-offset-4 tracking-tight">1초 주기로 자동 갱신</span>됩니다.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                        <ChevronRight size={14} />
+                        Auto Scroll Active
+                    </div>
                 </div>
             </div>
         </div>

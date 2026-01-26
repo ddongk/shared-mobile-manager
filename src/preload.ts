@@ -9,6 +9,9 @@ contextBridge.exposeInMainWorld('electron', {
         // 메인 프로세스에 데이터를 요청하고 결과를 비동기로 반환받음
         invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
 
+        // 메인 프로세스에 단방향 메시지 전송
+        send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+
         /**
          * 메인 프로세스로부터 이벤트를 수신하는 리스너 등록
          * @returns 리스너를 해제할 수 있는 함수(Unsubscribe)를 반환하여 메모리 누수를 방지함
@@ -27,10 +30,14 @@ contextBridge.exposeInMainWorld('electron', {
         removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel),
     },
 
-    /**
-     * 사용자 정보(이름, 부서 등) 영구 저장을 위한 API
-     * electron-store를 사용하는 메인 프로세스 핸들러를 호출합니다.
-     */
+    // --- 업데이트 관련 API ---
+    // GitHub 서버에 새 버전이 있는지 확인
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+
+    // 사용자가 승인했을 때 실제 다운로드 시작
+    startDownload: () => ipcRenderer.invoke('start-download'),
+
+    // --- 기존 기기 및 계정 관리 API ---
     saveGlobalAccount: (data: any) => ipcRenderer.invoke('save-global-account', data),
     getGlobalAccount: () => ipcRenderer.invoke('get-global-account'),
 

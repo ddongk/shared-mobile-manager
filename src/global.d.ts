@@ -3,6 +3,11 @@
  * 메인 프로세스(Main)와 렌더러 프로세스(React) 간의 통신 규격을 정의합니다.
  */
 export interface IElectronAPI {
+    // 업데이트 확인 (새 버전 정보 혹은 에러 반환)
+    checkForUpdates: () => Promise<any>;
+    // 업데이트 다운로드 시작
+    startDownload: () => Promise<void>;
+
     // 사용자 계정 정보를 로컬 전자 스토어에 저장하거나 불러오는 API
     saveGlobalAccount: (data: any) => Promise<{ success: boolean; error?: string }>;
     getGlobalAccount: () => Promise<any>;

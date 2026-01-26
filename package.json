@@ -1,45 +1,69 @@
 {
-  "name": "pizza-mobile",
-  "productName": "PIZZA Mobile",
-  "version": "1.0.0",
+  "name": "unipost-auto-launcher",
+  "productName": "Unipost Auto-Launcher",
+  "version": "1.0.8",
   "description": "공용폰 제어 및 관리 전용 도구",
   "main": ".vite/build/main.js",
   "scripts": {
     "clean": "rimraf out dist .vite",
-    "premake": "npm run clean",
-    "make": "electron-forge make",
     "start": "chcp 65001 && electron-forge start",
-    "package": "electron-forge package",
-    "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "build": "electron-forge package && electron-builder"
+    "package": "electron-forge package",
+    "build": "npm run clean && npm run package && electron-builder build --win --publish never",
+    "publish": "npm run clean && npm run package && dotenv -e .env -- electron-builder build --win --publish always"
+  },
+  "build": {
+    "appId": "com.unipost.autolauncher",
+    "productName": "Unipost Auto-Launcher",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/iconPizza.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "installerIcon": "assets/iconPizza.ico",
+      "uninstallerIcon": "assets/iconPizza.ico"
+    },
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "files": [
+      ".vite/build/**/*",
+      ".vite/renderer/**/*",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ddongk",
+        "repo": "shared-mobile-manager"
+      }
+    ]
   },
   "config": {
     "forge": {
       "packagerConfig": {
-        "executableName": "PIZZA_Mobile",
+        "executableName": "Unipost_Auto_Launcher",
         "asar": true,
         "icon": "./assets/iconPizza",
         "extraResource": [
           "./assets"
         ]
       },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "config": {
-            "name": "pizza_mobile",
-            "setupIcon": "./assets/iconPizza.ico",
-            "loadingGif": "./assets/AnimationPizza.gif"
-          }
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": [
-            "darwin"
-          ]
-        }
-      ],
       "plugins": [
         {
           "name": "@electron-forge/plugin-vite",
@@ -61,10 +85,6 @@
               }
             ]
           }
-        },
-        {
-          "name": "@electron-forge/plugin-auto-unpack-natives",
-          "config": {}
         }
       ]
     }
@@ -76,10 +96,11 @@
   "license": "MIT",
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",
-    "@electron-forge/maker-squirrel": "^7.10.2",
-    "@electron-forge/maker-zip": "^7.10.2",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.10.2",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
     "@electron-forge/plugin-vite": "^7.10.2",
+    "@electron/rebuild": "^4.0.2",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -87,6 +108,7 @@
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.20",
+    "dotenv-cli": "^11.0.0",
     "electron": "39.2.7",
     "electron-builder": "^26.4.0",
     "eslint": "^8.57.1",
@@ -104,12 +126,14 @@
     "@radix-ui/react-navigation-menu": "^1.2.14",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-toast": "^1.2.15",
+    "better-sqlite3": "^12.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "electron-log": "^5.4.3",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^11.0.2",
+    "electron-updater": "^6.7.3",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
