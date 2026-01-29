@@ -10,7 +10,9 @@ import dotenv from 'dotenv';
 import os from 'os';
 
 dotenv.config();
-const SERVER_URL = 'http://192.168.10.31:7003';
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+const SERVER_URL = 'https://otp.unipost.co.kr/';
+// const SERVER_URL = 'http://192.168.10.31:7003'; // test url
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -24,6 +26,9 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuiting = false;
 let currentOccupiedPhoneId: string | null = null;
+
+let lastKnownPhones: any[] = [];
+let isFetchingStatus = false;
 
 // 앱 아이콘 경로 설정 및 로그 파일 시스템 커스텀
 const iconPath = app.isPackaged
@@ -79,18 +84,92 @@ if (!gotTheLock) {
         log.info("Main: Unipost Auto-Launcher 실행 환경 준비 완료");
         createTray();
 
-        // 렌더러에서 요청하는 공용폰 상태 정보를 서버에서 가져와 전달
+        // 서버 주소
+        ipcMain.handle('get-server-url', () => {
+            const cleanBase = SERVER_URL.replace(/\/+$/, "");
+            return `${cleanBase}/`;
+        });
+
+        // 디바이스 상태 호출
         ipcMain.handle('get-phone-status', async () => {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1500);
+            if (isFetchingStatus) {
+                return { phones: lastKnownPhones, isNetworkConnected: true, isPending: true };
+            }
+
+            isFetchingStatus = true;
             try {
-                const res = await fetch(`${SERVER_URL}/phones`, { signal: controller.signal });
-                clearTimeout(timeoutId);
+                let currentUrl = store.get('server_url') || SERVER_URL;
+                const cleanBase = currentUrl.replace(/\/+$/, "");
+                const targetFullUrl = `${cleanBase}/phones`;
+                const res = await fetch(targetFullUrl);
+
+                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+
                 const data = await res.json();
-                return { phones: data.phones || [], isNetworkConnected: true };
-            } catch (e) {
-                clearTimeout(timeoutId);
-                return { phones: [], isNetworkConnected: false };
+                lastKnownPhones = data.phones || [];
+
+                return { phones: lastKnownPhones, isNetworkConnected: true };
+            } catch (e: any) {
+                log.error(`Main: 연결 실패 상세 에러: ${e.message}`);
+                return { phones: lastKnownPhones, isNetworkConnected: false };
+            } finally {
+                isFetchingStatus = false;
+            }
+        });
+
+        // 관리자 명단 조회
+        ipcMain.handle('get-admins', async () => {
+            try {
+                const cleanBase = SERVER_URL.replace(/\/+$/, "");
+                const res = await fetch(`${cleanBase}/check-admin-list`);
+                return await res.json();
+            } catch (e) { return []; }
+        });
+
+        // 관리자 여부 조회
+        ipcMain.handle('check-admin', async (_, hostname) => {
+            try {
+                const cleanBase = SERVER_URL.replace(/\/+$/, "");
+                const targetUrl = `${cleanBase}/check-admin?hostname=${hostname}`;
+
+                const res = await fetch(targetUrl);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                return await res.json();
+            } catch (e: any) {
+                log.error(`Main: 관리자 체크 통신 에러 - ${e.message}`);
+                return { isAdmin: false };
+            }
+        });
+
+        // 서버 설정 및 관리자 호스트네임 저장
+        ipcMain.handle('save-app-settings', async (_, settings) => {
+            try {
+                if (settings.serverUrl) store.set('server_url', settings.serverUrl);
+                if (settings.refreshInterval) store.set('refresh_interval', settings.refreshInterval);
+                return { success: true };
+            } catch (e) { return { success: false }; }
+        });
+
+        // 강제 초기화 명령
+        ipcMain.handle('request-force-release', async (_, { phoneId, hostname }) => {
+            try {
+                const cleanBase = SERVER_URL.replace(/\/+$/, "");
+                const res = await fetch(`${cleanBase}/force-release`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phoneId: phoneId,
+                        adminHostname: hostname
+                    })
+                });
+
+                const result = await res.json();
+                log.info(`Main: 강제 초기화 시도 결과 - ${JSON.stringify(result)}`);
+                return result;
+            } catch (e: any) {
+                log.error(`Main: 강제 초기화 통신 에러 - ${e.message}`);
+                return { success: false, error: e.message };
             }
         });
 

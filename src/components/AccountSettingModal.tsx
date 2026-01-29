@@ -5,7 +5,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Monitor, UserCircle, WifiOff, Wifi, Info } from "lucide-react";
+import { Monitor, UserCircle, WifiOff, Wifi, Info, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AccountSettingModalProps {
@@ -17,15 +17,25 @@ interface AccountSettingModalProps {
 export function AccountSettingModal({ open, onOpenChange }: AccountSettingModalProps) {
     const [hostname, setHostname] = React.useState("");// 현재 접속 중인 호스트네임
     const [isNetworkConnected, setIsNetworkConnected] = React.useState(true);// 서버와의 실시간 네트워크 연결 여부
+    const [isAdmin, setIsAdmin] = React.useState(false);
 
     React.useEffect(() => {
         if (open) {
             const initAccount = async () => {
                 window.electron.ipcRenderer.invoke('log-info', 'AccountSettingModal: 모달 진입 및 기기 정보 조회 시작');
-
+                const baseUrl = await window.electron.ipcRenderer.invoke('get-server-url');
                 // 현재 PC의 호스트네임 반영
                 const currentHostname = await window.electron.ipcRenderer.invoke('get-hostname');
                 setHostname(currentHostname);
+
+                try {
+                    const res = await fetch(`${baseUrl}check-admin?hostname=${currentHostname}`);
+                    const data = await res.json();
+                    setIsAdmin(data.isAdmin);
+                } catch (e) {
+                    console.error("관리자 체크 실패:", e);
+                    setIsAdmin(false);
+                }
 
                 // 현재 접속 기기 자동 등록 및 정보 갱신
                 await window.electron.saveGlobalAccount({
@@ -68,9 +78,18 @@ export function AccountSettingModal({ open, onOpenChange }: AccountSettingModalP
                             <DialogTitle className="text-2xl font-black text-slate-900 tracking-tighter">
                                 기기 정보 확인
                             </DialogTitle>
-                            <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest mt-0.5">
-                                Device Information
-                            </p>
+                            {isAdmin ? (
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                    <Shield size={12} className="text-red-500 fill-red-500" />
+                                    <span className="text-[11px] font-black text-red-500 uppercase tracking-widest">
+                                        Administrator
+                                    </span>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] font-black text-blue-500 uppercase tracking-widest mt-0.5">
+                                    Device Information
+                                </p>
+                            )}
                         </div>
                     </div>
                 </DialogHeader>
@@ -82,8 +101,14 @@ export function AccountSettingModal({ open, onOpenChange }: AccountSettingModalP
                             Hostname
                         </label>
                         <div className="relative group">
-                            <Monitor className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500 z-10" size={18} />
-                            <div className="h-16 pl-14 pr-6 bg-slate-50 border-none rounded-2xl font-black text-slate-700 shadow-inner text-lg flex items-center select-none cursor-default">
+                            <Monitor className={cn(
+                                "absolute left-5 top-1/2 -translate-y-1/2 z-10",
+                                isAdmin ? "text-red-500" : "text-blue-500"
+                            )} size={18} />
+                            <div className={cn(
+                                "h-16 pl-14 pr-6 border-none rounded-2xl font-black shadow-inner text-lg flex items-center select-none cursor-default",
+                                isAdmin ? "bg-red-50/30 text-red-700" : "bg-slate-50 text-slate-700"
+                            )}>
                                 {hostname}
                             </div>
                         </div>
@@ -93,7 +118,10 @@ export function AccountSettingModal({ open, onOpenChange }: AccountSettingModalP
                     <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                         <Info size={16} className="text-slate-400 mt-0.5 shrink-0" />
                         <p className="text-[12px] leading-relaxed text-slate-500 font-medium">
-                            해당 PC는 <span className="font-bold text-slate-700">{hostname}</span> 식별자로 자동 등록되었습니다. 공용폰 제어 시 이 이름으로 사용 기록이 남습니다.
+                            {isAdmin
+                                ? "관리자 권한으로 접속되었습니다. 대시보드에서 기기 강제 초기화가 가능합니다."
+                                : `해당 PC는 ${hostname} 식별자로 자동 등록되었습니다. 공용폰 제어 시 이 이름으로 사용 기록이 남습니다.`
+                            }
                         </p>
                     </div>
 
