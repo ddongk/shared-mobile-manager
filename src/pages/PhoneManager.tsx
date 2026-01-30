@@ -223,7 +223,7 @@ export default function PhoneManager({ selectedId, phoneData }: { selectedId: st
                     <div className="flex-1 bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.03)] p-8 flex flex-col overflow-hidden">
                         <div className="flex items-center gap-2.5 text-slate-800 mb-6 flex-shrink-0">
                             <ScrollText size={16} className="text-blue-500" />
-                            <h3 className="text-[12px] font-black uppercase tracking-widest italic">Access History</h3>
+                            <h3 className="text-[12px] font-black uppercase tracking-widest italic">Today's Log</h3>
                         </div>
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-1">

@@ -40,6 +40,8 @@ const today = new Date().toISOString().split('T')[0];
 log.transports.file.fileName = `${today}.log`;
 log.transports.console.format = '[{h}:{i}:{s}.{ms}] {text}';
 
+autoUpdater.autoDownload = false; // 수동 다운로드 설정
+
 // 기기 반납을 알리고 내부 점유 상태를 해제
 async function handleReleasePhone(phoneId: string) {
     try {
@@ -330,6 +332,45 @@ if (!gotTheLock) {
         // 프론트에서 보낸 메시지를 electron-log를 통해 파일에 기록
         ipcMain.handle('log-info', (_, message) => {
             log.info(message);
+        });
+
+
+        // 업데이트 다운로드 시작 핸들러
+        ipcMain.handle('start-download', () => {
+            log.info("Main: 업데이트 다운로드 시작");
+            autoUpdater.downloadUpdate();
+        });
+
+        // 업데이트 진행 상태 전달
+        autoUpdater.on('download-progress', (progressObj) => {
+            if (mainWindow) {
+                // 'update-progress' 리스너로 퍼센트 전달
+                mainWindow.webContents.send('update-progress', progressObj.percent);
+            }
+        });
+
+        // 다운로드 완료 시 처리
+        autoUpdater.on('update-downloaded', () => {
+            log.info("Main: 다운로드 완료, 3초 후 설치 및 재시작");
+            if (mainWindow) {
+                mainWindow.webContents.send('update-finished');
+            }
+
+            setTimeout(() => {
+                isQuiting = true; // 이 변수가 true여야 창 닫기 이벤트에서 app.quit() 작동
+                autoUpdater.quitAndInstall(false, true);
+            }, 3000);
+        });
+
+        // 에러 처리
+        autoUpdater.on('error', (err) => {
+            log.error(`[Update Error]
+               Message: ${err.message}
+               Stack: ${err.stack}`);
+
+            if (mainWindow) {
+                mainWindow.webContents.send('update-error', err.message);
+            }
         });
 
         createWindow();

@@ -1,7 +1,7 @@
 {
   "name": "unipost-auto-launcher",
   "productName": "Unipost Auto-Launcher",
-  "version": "1.0.9",
+  "version": "1.0.0",
   "description": "공용폰 제어 및 관리 전용 도구",
   "main": ".vite/build/main.js",
   "scripts": {
