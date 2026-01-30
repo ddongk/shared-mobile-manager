@@ -108,6 +108,21 @@ if (!gotTheLock) {
                 if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
 
                 const data = await res.json();
+                const phones = data.phones || [];
+
+                phones.forEach((phone: any) => {
+                    if (phone.status === 'available' && activeProcesses[phone.id]) {
+                        log.info(`Main: 관리자 강제 초기화 감지 - ${phone.id} 프로세스를 종료합니다.`);
+
+                        activeProcesses[phone.id].kill(); // scrcpy 창 닫기
+                        delete activeProcesses[phone.id]; // 관리 목록에서 삭제
+
+                        if (currentOccupiedPhoneId === phone.id) {
+                            currentOccupiedPhoneId = null;
+                        }
+                    }
+                });
+
                 lastKnownPhones = data.phones || [];
 
                 return { phones: lastKnownPhones, isNetworkConnected: true };
