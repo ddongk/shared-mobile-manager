@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ConnectionHelpModal } from "@/components/ConnectionHelpModal";
 
 export default function PhoneManager({ selectedId, phoneData }: { selectedId: string, phoneData: any }) {
     // 대기 요청 유효 시간 및 기본 상태 변수 정의
@@ -20,6 +21,9 @@ export default function PhoneManager({ selectedId, phoneData }: { selectedId: st
     const [timeLeft, setTimeLeft] = React.useState(60);
     const [ackedRequestIds, setAckedRequestIds] = React.useState<Set<string>>(new Set());
     const timerRef = React.useRef<any>(null);
+
+    //
+    const [showConnectionModal, setShowConnectionModal] = React.useState(false);
 
     // 기기 점유 확인 및 화면 제어(scrcpy) 실행
     const handleControlWithCheck = async () => {
@@ -156,105 +160,119 @@ export default function PhoneManager({ selectedId, phoneData }: { selectedId: st
                 </div>
             </div>
 
-            <div className="flex-1 grid grid-cols-12 gap-6 min-h-0 overflow-hidden">
+            {/* ====== 변경 시작 지점 ====== */}
+            <div className="flex-1 flex flex-col gap-6 min-h-0 overflow-hidden">
 
-                {/* 제어 시작, 화면 제어 중 상태, 반납 요청 버튼이 위치한 메인 카드 */}
-                <div className="col-span-12 lg:col-span-5 flex flex-col min-h-0">
-                    <div className={cn(
-                        "flex-1 rounded-[2.5rem] border p-8 flex flex-col shadow-lg transition-all duration-500",
-                        isMyPhone ? "bg-blue-50/50 border-blue-200" : "bg-white border-slate-100"
-                    )}>
-                        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest italic mb-8">Control Center</h3>
+                {/* 1. 상단 섹션: Control Center & Today's Log (가로 배치) */}
+                <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
 
-                        <div className="flex-1 flex flex-col justify-center gap-8">
-                            <div className={cn(
-                                "p-8 rounded-[2rem] border transition-all duration-500 shadow-inner flex flex-col justify-center min-h-[160px]",
-                                isMyPhone ? "bg-white border-blue-100" : "bg-slate-50/50 border-slate-100"
-                            )}>
-                                <div className="flex items-center gap-6">
-                                    <div className={cn(
-                                        "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm transition-colors",
-                                        isMyPhone ? "bg-blue-600 text-white" : "bg-slate-800 text-white"
-                                    )}>
-                                        <Monitor size={28} />
-                                    </div>
-                                    <div className="flex flex-col min-w-0">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight mb-1">Active PC Name</span>
-                                        <span className={cn("text-2xl font-black truncate tracking-tighter", isMyPhone ? "text-blue-700" : "text-slate-900")}>
-                                            {phone.status === 'busy' ? (isMyPhone ? `${phone.currentUser} (나)` : phone.currentUser) : "Available"}
-                                        </span>
+                    {/* 제어 시작, 화면 제어 중 상태, 반납 요청 버튼이 위치한 메인 카드 */}
+                    <div className="col-span-12 lg:col-span-5 flex flex-col min-h-0">
+                        <div className={cn(
+                            "flex-1 rounded-[2.5rem] border p-8 flex flex-col shadow-lg transition-all duration-500",
+                            isMyPhone ? "bg-blue-50/50 border-blue-200" : "bg-white border-slate-100"
+                        )}>
+                            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest italic mb-8">Control Center</h3>
+
+                            <div className="flex-1 flex flex-col justify-center gap-8">
+                                <div className={cn(
+                                    "p-8 rounded-[2rem] border transition-all duration-500 shadow-inner flex flex-col justify-center min-h-[160px]",
+                                    isMyPhone ? "bg-white border-blue-100" : "bg-slate-50/50 border-slate-100"
+                                )}>
+                                    <div className="flex items-center gap-6">
+                                        <div className={cn(
+                                            "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm transition-colors",
+                                            isMyPhone ? "bg-blue-600 text-white" : "bg-slate-800 text-white"
+                                        )}>
+                                            <Monitor size={28} />
+                                        </div>
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight mb-1">Active PC Name</span>
+                                            <span className={cn("text-2xl font-black truncate tracking-tighter", isMyPhone ? "text-blue-700" : "text-slate-900")}>
+                                                {phone.status === 'busy' ? (isMyPhone ? `${phone.currentUser} (나)` : phone.currentUser) : "Available"}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="h-[72px] flex-shrink-0">
-                                {phone.status === 'available' ? (
-                                    <Button onClick={handleControlWithCheck} className="w-full h-full bg-slate-900 hover:bg-blue-600 text-white font-black text-lg rounded-[1.5rem] shadow-xl transition-all group active:scale-[0.98]">
-                                        제어 시작하기 <ChevronRight size={22} className="ml-1 group-hover:translate-x-1 transition-transform" />
-                                    </Button>
-                                ) : (
-                                    isMyPhone ? (
-                                        <Button disabled className="w-full h-full bg-slate-100 text-blue-600 rounded-[1.5rem] font-black text-lg opacity-100 border border-blue-100">
-                                            <MonitorPlay size={22} className="mr-2 animate-bounce" /> 화면 제어 중...
+                                <div className="flex flex-col gap-3 flex-shrink-0">
+                                    {phone.status === 'available' ? (
+                                        <Button onClick={handleControlWithCheck} className="w-full h-[72px] bg-slate-900 hover:bg-blue-600 text-white font-black text-lg rounded-[1.5rem] shadow-xl transition-all group active:scale-[0.98]">
+                                            제어 시작하기 <ChevronRight size={22} className="ml-1 group-hover:translate-x-1 transition-transform" />
                                         </Button>
                                     ) : (
-                                        <Button
-                                            onClick={amIWaiting ? handleCancelRequest : handleRequest}
-                                            className={cn(
-                                                "w-full h-full rounded-[1.5rem] font-black text-lg shadow-lg transition-all active:scale-[0.98]",
-                                                amIWaiting
-                                                    ? "bg-white text-rose-500 border border-rose-200 hover:bg-rose-50 shadow-rose-100/50"
-                                                    : "bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200/50"
-                                            )}
-                                        >
-                                            {amIWaiting ? (
-                                                <span className="flex items-center gap-2"><XCircle size={20} /> 대기 취소하기</span>
-                                            ) : "반납 요청하기"}
-                                        </Button>
-                                    )
+                                        isMyPhone ? (
+                                            <Button disabled className="w-full h-full bg-slate-100 text-blue-600 rounded-[1.5rem] font-black text-lg opacity-100 border border-blue-100">
+                                                <MonitorPlay size={22} className="mr-2 animate-bounce" /> 화면 제어 중...
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                onClick={amIWaiting ? handleCancelRequest : handleRequest}
+                                                className={cn(
+                                                    "w-full h-full rounded-[1.5rem] font-black text-lg shadow-lg transition-all active:scale-[0.98]",
+                                                    amIWaiting
+                                                        ? "bg-white text-rose-500 border border-rose-200 hover:bg-rose-50 shadow-rose-100/50"
+                                                        : "bg-amber-500 text-white hover:bg-amber-600 shadow-amber-200/50"
+                                                )}
+                                            >
+                                                {amIWaiting ? (
+                                                    <span className="flex items-center gap-2"><XCircle size={20} /> 대기 취소하기</span>
+                                                ) : "반납 요청하기"}
+                                            </Button>
+                                        )
+                                    )}
+                                    <button
+                                        onClick={() => setShowConnectionModal(true)}
+                                        className="w-full h-10 mt-2 flex items-center gap-3 px-4 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white hover:border-rose-200 hover:shadow-sm transition-all group"
+                                    >
+                                        <AlertCircle size={15} className="text-rose-500" strokeWidth={2.5} />
+                                        <span className="flex-1 text-left text-[12px] font-black text-slate-500 group-hover:text-slate-900">연결이 안돼요?</span>
+                                        <ChevronRight size={14} className="text-slate-300 group-hover:text-rose-500 transition-colors" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 해당 기기를 사용했던 사용자들의 시계열 로그 목록 영역 */}
+                    <div className="col-span-12 lg:col-span-7 flex flex-col min-h-0 overflow-hidden">
+                        <div className="flex-1 bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.03)] p-8 flex flex-col overflow-hidden">
+                            <div className="flex-shrink-0 mb-6">
+                                <ScrollText size={16} className="text-blue-500 inline-block mr-2 align-text-bottom" />
+                                <h3 className="text-[12px] font-black uppercase tracking-widest italic inline-block">Today's Log</h3>
+                            </div>
+
+                            <div className="flex-1 h-0 overflow-y-auto custom-scrollbar pr-2 space-y-1">
+                                {phone.accessLogs && phone.accessLogs.length > 0 ? (
+                                    [...phone.accessLogs].sort((a,b) => b.startTime.localeCompare(a.startTime)).map((log, idx) => {
+                                        const start = new Date(log.startTime);
+                                        const end = new Date(log.endTime);
+                                        const startTime = start.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
+                                        const endTime = end.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
+
+                                        return (
+                                            <div key={idx} className="flex items-center justify-between py-1.5 px-4 rounded-xl hover:bg-slate-50 transition-colors group">
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-200 group-hover:bg-blue-400 transition-colors shrink-0" />
+                                                    <span className="font-bold text-slate-600 text-[13px] truncate group-hover:text-slate-900">{log.user}</span>
+                                                </div>
+                                                <div className="text-[11px] font-mono font-bold text-slate-400 shrink-0 bg-slate-50 group-hover:bg-white px-2 py-0.5 rounded-md border border-transparent group-hover:border-slate-100">
+                                                    {startTime} <span className="mx-1 opacity-20 text-slate-900">-</span> {endTime}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="h-full flex items-center justify-center text-slate-300 italic text-sm">No logs found</div>
                                 )}
                             </div>
                         </div>
                     </div>
+
                 </div>
 
-                {/* 해당 기기를 사용했던 사용자들의 시계열 로그 목록 영역 */}
-                <div className="col-span-12 lg:col-span-7 flex flex-col min-h-0 overflow-hidden">
-                    <div className="flex-1 bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.03)] p-8 flex flex-col overflow-hidden">
-                        <div className="flex items-center gap-2.5 text-slate-800 mb-6 flex-shrink-0">
-                            <ScrollText size={16} className="text-blue-500" />
-                            <h3 className="text-[12px] font-black uppercase tracking-widest italic">Today's Log</h3>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-1">
-                            {phone.accessLogs && phone.accessLogs.length > 0 ? (
-                                [...phone.accessLogs].sort((a,b) => b.startTime.localeCompare(a.startTime)).map((log, idx) => {
-                                    const start = new Date(log.startTime);
-                                    const end = new Date(log.endTime);
-                                    const startTime = start.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
-                                    const endTime = end.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
-
-                                    return (
-                                        <div key={idx} className="flex items-center justify-between py-1.5 px-4 rounded-xl hover:bg-slate-50 transition-colors group">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-200 group-hover:bg-blue-400 transition-colors shrink-0" />
-                                                <span className="font-bold text-slate-600 text-[13px] truncate group-hover:text-slate-900">{log.user}</span>
-                                            </div>
-                                            <div className="text-[11px] font-mono font-bold text-slate-400 shrink-0 bg-slate-50 group-hover:bg-white px-2 py-0.5 rounded-md border border-transparent group-hover:border-slate-100">
-                                                {startTime} <span className="mx-1 opacity-20 text-slate-900">-</span> {endTime}
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-slate-300 italic text-sm">No logs found</div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 현재 기기 사용을 위해 대기 중인 사용자 순번 리스트 영역 */}
-                <div className="col-span-12 flex-shrink-0">
+                {/* 2. 하단 섹션: 현재 기기 사용을 위해 대기 중인 사용자 순번 리스트 영역 */}
+                <div className="flex-shrink-0">
                     <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.03)] p-8">
                         <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center gap-2.5">
@@ -291,6 +309,7 @@ export default function PhoneManager({ selectedId, phoneData }: { selectedId: st
                     </div>
                 </div>
             </div>
+            {/* ====== 변경 끝 지점 ====== */}
 
             {/* 타 사용자의 반납 요청 수신 시 노출되는 확인 안내 팝업 */}
             <Dialog open={showReturnModal} onOpenChange={(o) => !o && setShowReturnModal(false)}>
@@ -328,6 +347,11 @@ export default function PhoneManager({ selectedId, phoneData }: { selectedId: st
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ConnectionHelpModal
+                open={showConnectionModal}
+                onOpenChange={setShowConnectionModal}
+            />
         </div>
     );
 }

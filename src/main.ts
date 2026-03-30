@@ -349,6 +349,27 @@ if (!gotTheLock) {
             log.info(message);
         });
 
+        ipcMain.handle('execute-command', async (event, { command }) => {
+            log.info(`Main: 커맨드 실행 요청 - ${command}`);
+            return new Promise((resolve) => {
+                exec(command, (error, stdout, stderr) => {
+                    if (error) {
+                        log.error(`Main: 커맨드 실행 실패 - ${error.message}`);
+                        resolve({
+                            success: false,
+                            error: error.message,
+                            output: stderr
+                        });
+                    } else {
+                        log.info(`Main: 커맨드 실행 성공`);
+                        resolve({
+                            success: true,
+                            output: stdout.trim()
+                        });
+                    }
+                });
+            });
+        });
 
         // 업데이트 다운로드 시작 핸들러
         ipcMain.handle('start-download', () => {

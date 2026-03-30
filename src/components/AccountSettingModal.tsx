@@ -120,7 +120,7 @@ export function AccountSettingModal({ open, onOpenChange }: AccountSettingModalP
                         <p className="text-[12px] leading-relaxed text-slate-500 font-medium">
                             {isAdmin
                                 ? "관리자 권한으로 접속되었습니다. 대시보드에서 기기 강제 초기화가 가능합니다."
-                                : `해당 PC는 ${hostname} 식별자로 자동 등록되었습니다. 공용폰 제어 시 이 이름으로 사용 기록이 남습니다.`
+                                : `해당 PC의 hostname(${hostname})을 식별자로 자동 등록되었습니다. 공용폰 제어 시 이 이름으로 사용 기록이 남습니다.`
                             }
                         </p>
                     </div>

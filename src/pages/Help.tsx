@@ -108,7 +108,7 @@ export default function Help() {
                             <div>
                                 <h4 className="text-[13px] font-black text-slate-800 mb-0.5">기기 전원 종료 확인</h4>
                                 <p className="text-[11px] text-slate-500 leading-snug">
-                                    전원이 꺼지면 포트 연결이 끊깁니다. 폰을 켜고 <span className="text-rose-600 font-bold">공용폰 메뉴</span>에 들어가 <span className="text-rose-600 font-bold">'연결이 안돼요'</span> 버튼으로 재연결을 시도하세요.
+                                    전원이 꺼지면 포트 연결이 끊깁니다. 폰을 켜고 <span className="text-rose-600 font-bold">공용폰 메뉴</span>에 들어가 <span className="text-rose-600 font-bold">'연결이 안돼요?'</span> 버튼으로 재연결을 시도하세요.
                                 </p>
                             </div>
                         </div>
