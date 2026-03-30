@@ -114,66 +114,100 @@ export default function Notice() {
                         <Loader2 className="animate-spin text-slate-300" size={24}/>
                     </div>
                 ) : (
-                    phones.map((phone) => (
-                        <div
-                            key={phone.id}
-                            className={cn(
-                                "p-6 rounded-[2rem] border transition-all duration-300 flex flex-col gap-4 relative group",
-                                phone.status === 'available'
-                                    ? "bg-white border-slate-100 shadow-sm hover:shadow-md"
-                                    : "bg-blue-50/50 border-blue-100 shadow-none"
-                            )}
-                        >
-                            {/* 관리자 전용 강제 초기화 버튼 */}
-                            {isAdmin && phone.status === 'busy' && (
-                                <button
-                                    onClick={() => handleForceRelease(phone.id)}
-                                    className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-transform hover:scale-110 z-20"
-                                    title="강제 초기화"
-                                >
-                                    <RotateCcw size={14} />
-                                </button>
-                            )}
-
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Smartphone size={14} className={phone.status === 'available' ? "text-slate-400" : "text-blue-500"}/>
-                                    <span className="text-[14px] font-black text-slate-700 uppercase tracking-tight">{phone.name}</span>
-                                </div>
-                                {phone.status === 'available' ? (
-                                    <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                        <span className="text-[9px] font-black text-emerald-600 uppercase">Idle</span>
-                                    </div>
-                                ) : (
-                                    <CheckCircle2 size={16} className="text-blue-500"/>
+                    <>
+                        {/* 1. 실제 서버에서 받아온 폰 리스트 */}
+                        {phones.map((phone) => (
+                            <div
+                                key={phone.id}
+                                className={cn(
+                                    "p-6 rounded-[2rem] border transition-all duration-300 flex flex-col gap-4 relative group",
+                                    phone.status === 'available'
+                                        ? "bg-white border-slate-100 shadow-sm hover:shadow-md"
+                                        : "bg-blue-50/50 border-blue-100 shadow-none"
                                 )}
+                            >
+                                {isAdmin && phone.status === 'busy' && (
+                                    <button
+                                        onClick={() => handleForceRelease(phone.id)}
+                                        className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600 transition-transform hover:scale-110 z-20"
+                                    >
+                                        <RotateCcw size={14} />
+                                    </button>
+                                )}
+
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Smartphone size={14} className={phone.status === 'available' ? "text-slate-400" : "text-blue-500"}/>
+                                        <span className="text-[14px] font-black text-slate-700 uppercase tracking-tight">{phone.name}</span>
+                                    </div>
+                                    {phone.status === 'available' ? (
+                                        <div className="flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                            <span className="text-[9px] font-black text-emerald-600 uppercase">Idle</span>
+                                        </div>
+                                    ) : (
+                                        <CheckCircle2 size={16} className="text-blue-500"/>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-3 bg-white/80 p-4 rounded-2xl border border-slate-100/50 shadow-inner">
+                                    <div className={cn(
+                                        "w-10 h-10 rounded-xl flex items-center justify-center",
+                                        phone.status === 'available' ? "bg-slate-50 text-slate-300" : "bg-blue-600 text-white shadow-md scale-105"
+                                    )}>
+                                        <Monitor size={20}/>
+                                    </div>
+                                    <div className="flex flex-col overflow-hidden">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active PC</span>
+                                        <span className={cn(
+                                            "text-[13px] font-black truncate",
+                                            phone.status === 'available' ? "text-slate-200 italic font-medium" : "text-slate-800"
+                                        )}>
+                                {phone.status === 'available' ? "Available" : phone.currentUser}
+                            </span>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between items-center px-1">
+                                    <span className="text-[10px] font-bold text-slate-300 tracking-tighter italic">ID: {phone.id}</span>
+                                    <span className="text-[10px] font-bold text-slate-300 tracking-tighter">{phone.ip}</span>
+                                </div>
+                            </div>
+                        ))}
+
+                        {/* 2. 가짜(더미) 공용폰 2번 박스 추가 */}
+                        <div className="p-6 rounded-[2rem] border border-slate-200 bg-slate-50/40 flex flex-col gap-4 relative opacity-60 select-none shadow-sm">
+                            {/* 상단 미연결 안내 라벨 */}
+                            <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap px-3 py-1 bg-white border border-slate-200 rounded-full shadow-sm">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight">연결되지 않은 기기</span>
                             </div>
 
-                            <div className="flex items-center gap-3 bg-white/80 p-4 rounded-2xl border border-slate-100/50 shadow-inner">
-                                <div className={cn(
-                                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                                    phone.status === 'available' ? "bg-slate-50 text-slate-300" : "bg-blue-600 text-white shadow-md scale-105"
-                                )}>
+                            <div className="flex items-center justify-between mt-2">
+                                <div className="flex items-center gap-2">
+                                    <Smartphone size={14} className="text-slate-300"/>
+                                    <span className="text-[14px] font-black text-slate-300 uppercase tracking-tight">공용폰 2</span>
+                                </div>
+                                <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest italic">Disabled</span>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 bg-white/50 p-4 rounded-2xl border border-slate-200/50 shadow-inner">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-100 text-slate-300">
                                     <Monitor size={20}/>
                                 </div>
-                                <div className="flex flex-col overflow-hidden">
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active PC</span>
-                                    <span className={cn(
-                                        "text-[13px] font-black truncate",
-                                        phone.status === 'available' ? "text-slate-200 italic font-medium" : "text-slate-800"
-                                    )}>
-                                        {phone.status === 'available' ? "Available" : phone.currentUser}
-                                    </span>
+                                <div className="flex flex-col">
+                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Active PC</span>
+                                    <span className="text-[13px] font-black text-slate-200 italic tracking-tight">Ready to Connect</span>
                                 </div>
                             </div>
 
                             <div className="flex justify-between items-center px-1">
-                                <span className="text-[10px] font-bold text-slate-300 tracking-tighter italic">ID: {phone.id}</span>
-                                <span className="text-[10px] font-bold text-slate-300 tracking-tighter">{phone.ip}</span>
+                                <span className="text-[10px] font-bold text-slate-200 tracking-tighter italic">ID: phone2</span>
+                                <span className="text-[10px] font-bold text-slate-200 tracking-tighter">0.0.0.0</span>
                             </div>
                         </div>
-                    ))
+                    </>
                 )}
             </div>
 
@@ -184,9 +218,13 @@ export default function Notice() {
                         <UserCircle size={22}/>
                         <h3 className="text-base font-black tracking-tight italic">사용자 정보 관리</h3>
                     </div>
-                    <div className="bg-white/80 p-5 rounded-2xl border border-amber-200/50 text-[13px] text-slate-600 leading-relaxed font-medium shadow-sm w-full">
-                        본 프로그램은 별도의 회원가입 없이 PC의 <span className="text-amber-700 font-black">Hostname(장치 이름)</span>을 식별자로 사용합니다.
-                        기기 점유 및 반납 로그는 자동으로 해당 이름으로 기록되므로 별도의 설정이 필요 없습니다.
+                    {/* 에티켓 박스와 동일하게 점(Pulse)이 포함된 박스 구조 */}
+                    <div className="flex gap-3 items-start font-bold text-[13px] p-5 rounded-2xl border transition-all bg-white shadow-md shadow-amber-50 ring-1 ring-amber-200 text-slate-700 w-full">
+                        <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0 bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.6)]"/>
+                        <p className="leading-relaxed">
+                            본 프로그램은 별도의 회원가입 없이 PC의 <span className="text-amber-700 font-black">Hostname(장치 이름)</span>을 식별자로 사용합니다.
+                            기기 점유 및 반납 로그는 자동으로 해당 이름으로 기록되므로 별도의 설정이 필요 없습니다.
+                        </p>
                     </div>
                 </div>
 
@@ -198,18 +236,12 @@ export default function Notice() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                         {[
                             {text: "사용 종료 시 프로그램을 종료하거나 반납 버튼을 눌러주세요.", highlight: "프로그램을 종료"},
-                            {text: "공용폰 3, 5 모델은 반드시 충전 상태를 유지해 주세요.", highlight: "충전 상태를 유지", isFocus: true},
+                            {text: "공용폰 3, 5 모델은 반드시 충전 상태를 유지해 주세요.", highlight: "충전 상태를 유지"},
                             {text: "반납 요청 알림이 뜨면 1분 이내에 정리 부탁드립니다.", highlight: "1분 이내"},
                             {text: "장시간 점유가 필요할 경우 메신저로 미리 양해를 구해주세요.", highlight: "메신저로 미리 양해"}
                         ].map((item, idx) => (
-                            <div key={idx} className={cn(
-                                "flex gap-3 items-start font-bold text-[12px] p-4 rounded-2xl border shadow-sm h-full transition-all bg-white/60 border-blue-100/50 text-slate-700",
-                                item.isFocus && "ring-1 ring-blue-200 shadow-md shadow-blue-50"
-                            )}>
-                                <div className={cn(
-                                    "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-blue-500",
-                                    item.isFocus && "animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]"
-                                )}/>
+                            <div key={idx} className="flex gap-3 items-start font-bold text-[12px] p-4 rounded-2xl border transition-all bg-white shadow-md shadow-blue-50 ring-1 ring-blue-200 text-slate-700 h-full">
+                                <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]"/>
                                 <p className="leading-snug">
                                     {item.text.split(item.highlight)[0]}
                                     <span className="text-blue-600 font-black">{item.highlight}</span>

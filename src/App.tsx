@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Bell, Smartphone, Settings, ClipboardList, X, ScrollText, ChevronRight, RefreshCw, Settings2 } from "lucide-react";
+import { Bell, Smartphone, Settings, ClipboardList, X, ScrollText, ChevronRight, RefreshCw, Settings2, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import Notice from "./pages/Notice";
 import PhoneManager from "./pages/PhoneManager";
+import Help from "./pages/Help";
 import { AccountSettingModal } from "./components/AccountSettingModal";
 import { UpdateModal } from "@/components/UpdateModal";
 
@@ -87,6 +88,7 @@ export default function App() {
                 const selectedPhone = phoneList.find(p => p.id === selectedPhoneId);
                 return <PhoneManager selectedId={selectedPhoneId} phoneData={selectedPhone} />;
             }
+            case 'Help': return <Help />;
             default: return <Notice />;
         }
     };
@@ -131,7 +133,7 @@ export default function App() {
                     <Bell size={24} />
                 </button>
 
-                <div className="relative">
+                <div className="relative mb-6">
                     <button
                         onClick={() => setIsPhoneMenuOpen(!isPhoneMenuOpen)}
                         className={cn(
@@ -161,6 +163,16 @@ export default function App() {
                         </>
                     )}
                 </div>
+
+                <button
+                    onClick={() => { setActiveMenu('Help'); setIsPhoneMenuOpen(false); }}
+                    className={cn(
+                        "p-3.5 rounded-2xl transition-all relative outline-none",
+                        activeMenu === 'Help' ? "bg-blue-50 text-blue-600 shadow-sm ring-1 ring-blue-100" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                    )}
+                >
+                    <HelpCircle size={24} />
+                </button>
             </aside>
 
             {/* 헤더 및 메인 콘텐츠 렌더링 영역 */}
