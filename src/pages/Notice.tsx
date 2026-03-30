@@ -20,6 +20,11 @@ export default function Notice() {
     const [isAdmin, setIsAdmin] = React.useState(false);
     const [myHostname, setMyHostname] = React.useState("");
 
+    // 관리자 메시지 상태
+    const [adminMessage, setAdminMessage] = React.useState("불러오는 중...");
+    const [isSaving, setIsSaving] = React.useState(false);
+    const [showSaveSuccess, setShowSaveSuccess] = React.useState(false);
+
     // 서버 베이스 URL
     const getApiUrl = async (endpoint: string) => {
         const baseUrl = await window.electron.ipcRenderer.invoke('get-server-url');
@@ -76,11 +81,45 @@ export default function Notice() {
         }
     };
 
+    // 최초 로딩 시 서버에서 관리자 메시지 가져오기
+    const fetchAdminMessage = async () => {
+        try {
+            const message = await window.electron.ipcRenderer.invoke('get-admin-message');
+            setAdminMessage(message);
+        } catch (error) {
+            console.error("메시지 로드 실패", error);
+        }
+    };
+
+    const handleSaveMessage = async () => {
+        if (isSaving) return;
+
+        setIsSaving(true);
+        setShowSaveSuccess(false);
+
+        try {
+            const result = await window.electron.ipcRenderer.invoke('save-admin-message', adminMessage);
+            if (result.success) {
+                setShowSaveSuccess(true);
+                setTimeout(() => setShowSaveSuccess(false), 2000);
+            } else {
+                console.error("저장 실패:", result.error);
+                alert("저장 실패: " + (result.error || "서버 응답 오류"));
+            }
+        } catch (error) {
+            console.error("저장 통신 에러:", error);
+            alert("통신 실패: 서버와 연결할 수 없습니다.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     // 최초 실행 및 주기적인 자동 갱신 설정
     React.useEffect(() => {
         window.electron.ipcRenderer.invoke('log-info', 'Notice: 대시보드 진입 및 자동 갱신 시작');
         checkAdminStatus();
         fetchStatus();
+        fetchAdminMessage();
         const timer = setInterval(fetchStatus, 4000);
         return () => {
             window.electron.ipcRenderer.invoke('log-info', 'Notice: 대시보드 이탈 및 타이머 해제');
@@ -213,18 +252,63 @@ export default function Notice() {
 
             {/* 안내 섹션 */}
             <div className="grid gap-6 px-1">
+                {/* 관리자의 한마디 박스 */}
                 <div className="bg-amber-50/80 border border-amber-100 p-7 rounded-[2rem] shadow-sm">
-                    <div className="flex items-center gap-2.5 mb-5 text-amber-600">
-                        <UserCircle size={22}/>
-                        <h3 className="text-base font-black tracking-tight italic">사용자 정보 관리</h3>
+                    <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-2.5 text-amber-600">
+                            <UserCircle size={22}/>
+                            <h3 className="text-base font-black tracking-tight italic">관리자의 한마디</h3>
+                        </div>
+
+                        {/* 관리자일 때만 노출되는 저장 버튼 */}
+                        {isAdmin && (
+                            <div className="flex items-center gap-3">
+                                {/* 💡 저장 성공 시 나타나는 메시지 */}
+                                {showSaveSuccess && (
+                                    <span className="text-[11px] font-bold text-emerald-600 animate-bounce">
+                                    ✓ 저장 완료!
+                                </span>
+                                )}
+                                <button
+                                    onClick={handleSaveMessage}
+                                    disabled={isSaving}
+                                    className={cn(
+                                        "flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[11px] font-black transition-all shadow-md active:scale-95",
+                                        isSaving
+                                            ? "bg-slate-300 text-white cursor-not-allowed"
+                                            : "bg-amber-500 hover:bg-amber-600 text-white shadow-amber-200"
+                                    )}
+                                >
+                                    {isSaving ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                    {isSaving ? "저장 중..." : "저장하기"}
+                                </button>
+                            </div>
+                        )}
                     </div>
-                    {/* 에티켓 박스와 동일하게 점(Pulse)이 포함된 박스 구조 */}
-                    <div className="flex gap-3 items-start font-bold text-[13px] p-5 rounded-2xl border transition-all bg-white shadow-md shadow-amber-50 ring-1 ring-amber-200 text-slate-700 w-full">
+
+                    {/* 입력/표시 컨테이너 */}
+                    <div className={cn(
+                        "flex gap-3 items-start font-bold text-[13px] p-5 rounded-2xl border transition-all bg-white shadow-md shadow-amber-50 ring-1 ring-amber-200 text-slate-700 w-full",
+                        isAdmin ? "focus-within:ring-amber-400 focus-within:shadow-lg ring-amber-300" : ""
+                    )}>
                         <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0 bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.6)]"/>
-                        <p className="leading-relaxed">
-                            본 프로그램은 별도의 회원가입 없이 PC의 <span className="text-amber-700 font-black">Hostname(장치 이름)</span>을 식별자로 사용합니다.
-                            기기 점유 및 반납 로그는 자동으로 해당 이름으로 기록되므로 별도의 설정이 필요 없습니다.
-                        </p>
+
+                        {isAdmin ? (
+                            <textarea
+                                value={adminMessage}
+                                onChange={(e) => setAdminMessage(e.target.value)}
+                                readOnly={isSaving}
+                                className="w-full bg-transparent border-none focus:ring-0 p-0 resize-none leading-relaxed min-h-[60px] text-slate-800 placeholder:text-slate-300 outline-none"
+                                placeholder="사용자들에게 남길 메시지를 입력하세요..."
+                                spellCheck={false}
+                            />
+                        ) : (
+                            <div className="w-full min-h-[60px]">
+                                <p className="leading-relaxed whitespace-pre-wrap text-slate-800">
+                                    {adminMessage}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
 

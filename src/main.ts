@@ -377,6 +377,43 @@ if (!gotTheLock) {
             autoUpdater.downloadUpdate();
         });
 
+        // 관리자 메시지 조회 (화면 로딩 시)
+        ipcMain.handle('get-admin-message', async () => {
+            try {
+                const cleanBase = SERVER_URL.replace(/\/+$/, "");
+                const res = await fetch(`${cleanBase}/admin-message`);
+
+                if (res.ok) {
+                    const data = await res.json();
+                    return data.message || "남긴 메시지가 없습니다.";
+                }
+                throw new Error(`HTTP ${res.status}`);
+            } catch (e: any) {
+                log.warn(`Main: 관리자 메시지 조회 실패 (기본값 반환) - ${e.message}`);
+                return "남긴 메시지가 없습니다.";
+            }
+        });
+
+        // 관리자 메시지 저장 (저장 버튼 클릭 시)
+        ipcMain.handle('save-admin-message', async (_, message) => {
+            try {
+                const cleanBase = SERVER_URL.replace(/\/+$/, "");
+                const res = await fetch(`${cleanBase}/admin-message`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                log.info(`Main: 관리자 메시지 업데이트 완료`);
+                return { success: true };
+            } catch (e: any) {
+                log.error(`Main: 관리자 메시지 저장 에러 - ${e.message}`);
+                return { success: false, error: e.message };
+            }
+        });
+
         // 업데이트 진행 상태 전달
         autoUpdater.on('download-progress', (progressObj) => {
             if (mainWindow) {
