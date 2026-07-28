@@ -487,7 +487,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 900,
-        resizable: false,
+        resizable: true,
         icon: iconPath,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
